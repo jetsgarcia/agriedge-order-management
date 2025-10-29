@@ -10,7 +10,8 @@ trigger AgriEdgeOrderTrigger on AgriEdge_Order__c (after insert, after update) {
 
     for (AgriEdge_Order__c order : Trigger.new) {
         AgriEdge_Order__c oldOrder = null;
-
+        
+        // Only access Trigger.oldMap for update events
         if (Trigger.isUpdate) {
             oldOrder = Trigger.oldMap.get(order.Id);
         }
@@ -22,7 +23,7 @@ trigger AgriEdgeOrderTrigger on AgriEdge_Order__c (after insert, after update) {
             relevantOrders.add(order);
         }
 
-        // Set to Processing if payment is pending
+        // If Payment is Pending → Set Order Status to Processing
         if (order.Payment_Status__c == 'Pending' && order.Order_Status__c != 'Processing') {
             ordersToUpdate.add(new AgriEdge_Order__c(
                 Id = order.Id,
@@ -30,7 +31,7 @@ trigger AgriEdgeOrderTrigger on AgriEdge_Order__c (after insert, after update) {
             ));
         }
 
-        // Set to Canceled if payment failed
+        // If Payment Failed → Set Order Status to Cancelled
         if (order.Payment_Status__c == 'Failed') {
             ordersToUpdate.add(new AgriEdge_Order__c(
                 Id = order.Id,
@@ -40,17 +41,15 @@ trigger AgriEdgeOrderTrigger on AgriEdge_Order__c (after insert, after update) {
         }
     }
 
+    // ✅ Perform updates outside of the loop to optimize DML
     if (!ordersToUpdate.isEmpty()) {
         update ordersToUpdate;
     }
 
+    // ✅ Delete related records if Order is Cancelled
     if (!failedOrderIds.isEmpty()) {
-        List<AgriEdge_OrderItem__c> orderItemsToDelete = [
-            SELECT Id FROM AgriEdge_OrderItem__c WHERE Order__c IN :failedOrderIds
-        ];
-        List<AgriEdge_Shipment__c> shipmentsToDelete = [
-            SELECT Id FROM AgriEdge_Shipment__c WHERE Order__c IN :failedOrderIds
-        ];
+        List<AgriEdge_OrderItem__c> orderItemsToDelete = [SELECT Id FROM AgriEdge_OrderItem__c WHERE AgriEdge_Order__c IN :failedOrderIds];
+        List<AgriEdge_Shipment__c> shipmentsToDelete = [SELECT Id FROM AgriEdge_Shipment__c WHERE AgriEdge_Order__c IN :failedOrderIds];
 
         if (!orderItemsToDelete.isEmpty()) {
             delete orderItemsToDelete;
@@ -60,9 +59,11 @@ trigger AgriEdgeOrderTrigger on AgriEdge_Order__c (after insert, after update) {
         }
     }
 
+    // ✅ Call Helper Class for Shipment Processing
     if (!relevantOrders.isEmpty()) {
         AgriEdgeOrderShipmentHelper.processOrderStatusChange(relevantOrders);
     }
 
+    // Reset recursion flag
     AgriEdgeOrderTriggerHelper.isTriggerExecuted = false;
 }

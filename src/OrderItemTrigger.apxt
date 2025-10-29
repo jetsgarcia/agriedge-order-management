@@ -3,8 +3,8 @@ trigger OrderItemTrigger on AgriEdge_OrderItem__c (after insert, after update) {
 
     // Collect Order IDs from inserted/updated OrderItem records
     for (AgriEdge_OrderItem__c orderItem : Trigger.new) {
-        if (orderItem.Order__c != null) {
-            orderIds.add(orderItem.Order__c);
+        if (orderItem.AgriEdge_Order__c != null) {
+            orderIds.add(orderItem.AgriEdge_Order__c);
         }
     }
 
